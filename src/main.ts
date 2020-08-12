@@ -4,10 +4,25 @@ import * as vscode from 'vscode'
 
 export class VslsFileSystem {
     private readonly _vslsApi: Promise<vsls.LiveShare | null>
-    service: vsls.SharedService | null
+    service: vsls.SharedService | null = null
 
     constructor() {
         this._vslsApi = vsls.getApi()
+    }
+
+    async start() {
+        const vslsApi = await this.vslsApi()
+        vslsApi.onDidChangeSession(() => {
+            this.startService()
+        })
+        return this.startService()
+    }
+
+    private async startService() {
+        const vslsApi = await this.vslsApi()
+        if (vslsApi.session.role === vsls.Role.Host) {
+            return this.startFileSystemServiceOnHost()
+        }
     }
 
     async vslsApi() {
@@ -32,11 +47,15 @@ export class VslsFileSystem {
             throw new Error()
         }
         const uri = vscode.Uri.parse(uriStr)
-        const path = vslsApi?.convertSharedUriToLocal(uri)
+        if (uri.scheme !== 'vslsfs') {
+            throw new Error()
+        }
+        const vslsUri = uri.with({scheme: 'vsls'})
+        const path = vslsApi?.convertSharedUriToLocal(vslsUri)
         return path
     }
 
-    async registerFileSystemProviderOnHost() {
+    async startFileSystemServiceOnHost() {
         const vslsApi = await this.vslsApi()
         const service = await vslsApi.shareService('vslsfs')
         this.service = service
@@ -52,5 +71,3 @@ export class VslsFileSystem {
     }
 
 }
-
-
