@@ -8,6 +8,18 @@ function assertString(str: unknown): asserts str is string {
     }
 }
 
+function assertUint8Array(data: unknown): asserts data is Uint8Array {
+    if (data instanceof Uint8Array) {
+        return
+    } else {
+        throw new Error()
+    }
+}
+
+type Watcher = {
+    watch: (uri: Uri) => void
+}
+
 export class VslsFileSystem {
     private readonly _vslsApi: Promise<vsls.LiveShare | null>
     serviceOnHost: vsls.SharedService | null = null
@@ -113,6 +125,20 @@ export class VslsFileSystem {
             const newUri = await this.uriToPath(newUriStr)
             await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: options?.overwrite })
         })
+
+        service.onRequest('stat', async ([uriStr]: [unknown]) => {
+            assertString(uriStr)
+            const path = await this.uriToPath(uriStr)
+            const ret = await vscode.workspace.fs.stat(path)
+            return ret
+        })
+
+        service.onRequest('writeFile', async ([uriStr, content]: [unknown, unknown]) => {
+            assertString(uriStr)
+            assertUint8Array(content)
+            const path = await this.uriToPath(uriStr)
+            await vscode.workspace.fs.writeFile(path, content)
+        })
     }
 
     async startFileSystemProviderOnGuest() {
@@ -129,10 +155,14 @@ export class VslsFileSystem {
 }
 
 export class VslsfsProvider implements vscode.FileSystemProvider {
+    private readonly service: vsls.SharedServiceProxy
     private emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>()
+    watcher?: Watcher
     onDidChangeFile: vscode.Event<vscode.FileChangeEvent[]>
 
-    constructor(private readonly service: vsls.SharedServiceProxy) {
+    constructor(service: vsls.SharedServiceProxy, watcher?: Watcher) {
+        this.service = service
+        this.watcher = watcher
         this.onDidChangeFile = this.emitter.event
     }
 
@@ -178,8 +208,8 @@ export class VslsfsProvider implements vscode.FileSystemProvider {
         return this.service.request('watch', [uriStr, options]) as any
     }
 
-    writeFile(uri: Uri, content: Uint8Array, options: { create: boolean, overwrite: boolean }): Promise<void> {
+    writeFile(uri: Uri, content: Uint8Array): Promise<void> {
         const uriStr = uri.toString(true)
-        return this.service.request('writeFile', [uriStr, content, options])
+        return this.service.request('writeFile', [uriStr, content])
     }
 }
