@@ -136,6 +136,19 @@ export class VslsFileSystem {
             return ret
         })
 
+        service.onRequest('watch', async ([uriStr]: [unknown]) => {
+            assertString(uriStr)
+            const path = await this.uriToPath(uriStr)
+            if (!this.watcher) {
+                throw new Error()
+            }
+            this.watcher.onDidChange((e) => {
+                if (e.fsPath === path.fsPath) {
+                    service.notify('change', { uri: uriStr, type: vscode.FileChangeType.Changed })
+                }
+            })
+        })
+
         service.onRequest('writeFile', async ([uriStr, content]: [unknown, unknown]) => {
             assertString(uriStr)
             assertUint8Array(content)
@@ -165,6 +178,10 @@ export class VslsfsProvider implements vscode.FileSystemProvider {
     constructor(service: vsls.SharedServiceProxy) {
         this.service = service
         this.onDidChangeFile = this.emitter.event
+        this.service.onNotify('change', (ev: { uri: string, type: vscode.FileChangeType }) => {
+            const uri = Uri.parse(ev.uri)
+            this.emitter.fire([{ uri, type: ev.type }])
+        })
     }
 
     copy(source: Uri, destination: Uri, options: { overwrite: boolean }): Promise<void> {
