@@ -98,6 +98,14 @@ export class VslsFileSystem {
             const data = await vscode.workspace.fs.readFile(path)
             return data
         })
+
+        service.onRequest('readDirectory', async ([uriStr]: [unknown]) => {
+            assertString(uriStr)
+            const path = await this.uriToPath(uriStr)
+            const ret = await vscode.workspace.fs.readDirectory(path)
+            return ret
+        })
+
     }
 
     async startFileSystemProviderOnGuest() {
