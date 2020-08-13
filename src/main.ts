@@ -21,7 +21,7 @@ export class VslsFileSystem {
     private readonly _vslsApi: Promise<vsls.LiveShare | null>
     serviceOnHost: vsls.SharedService | null = null
     serviceOnGuest: vsls.SharedServiceProxy | null = null
-    watcher?: vscode.FileSystemWatcher
+    disposable?: vscode.Disposable
 
     constructor() {
         this._vslsApi = vsls.getApi()
@@ -33,6 +33,12 @@ export class VslsFileSystem {
             this.startService()
         })
         return this.startService()
+    }
+
+    async end() {
+        this.disposable?.dispose()
+        const vslsApi = await this.vslsApi()
+        vslsApi.end()
     }
 
     private async startService() {
@@ -79,10 +85,6 @@ export class VslsFileSystem {
         if (!service) {
             throw new Error()
         }
-        const folder = this.workspaceFolder()
-        const pattern = new vscode.RelativePattern(folder, '**/*')
-        const watcher = vscode.workspace.createFileSystemWatcher(pattern)
-        this.watcher = watcher
 
         service.onRequest('copy', async ([srcUriStr, dstUriStr, options]: [unknown, unknown, { overwrite?: boolean}]) => {
             assertString(srcUriStr)
@@ -136,17 +138,28 @@ export class VslsFileSystem {
             return ret
         })
 
+        const folder = this.workspaceFolder()
+        const pattern = new vscode.RelativePattern(folder, '**/*')
+        const watcher = vscode.workspace.createFileSystemWatcher(pattern)
+        const watchedUris: Set<string> = new Set()
+        const disposable = watcher.onDidChange((e) => {
+            if (watchedUris.has(e.fsPath)) {
+                service.notify('change', { uri: e.toString(true), type: vscode.FileChangeType.Changed })
+            }
+        })
+        this.disposable?.dispose()
+        this.disposable = disposable
+
         service.onRequest('watch', async ([uriStr]: [unknown]) => {
             assertString(uriStr)
             const path = await this.uriToPath(uriStr)
-            if (!this.watcher) {
-                throw new Error()
-            }
-            this.watcher.onDidChange((e) => {
-                if (e.fsPath === path.fsPath) {
-                    service.notify('change', { uri: uriStr, type: vscode.FileChangeType.Changed })
-                }
-            })
+            watchedUris.add(path.fsPath)
+        })
+
+        service.onRequest('unwatch', async ([uriStr]: [unknown]) => {
+            assertString(uriStr)
+            const path = await this.uriToPath(uriStr)
+            watchedUris.delete(path.fsPath)
         })
 
         service.onRequest('writeFile', async ([uriStr, content]: [unknown, unknown]) => {
@@ -221,9 +234,13 @@ export class VslsfsProvider implements vscode.FileSystemProvider {
         return this.service.request('stat', [uriStr])
     }
 
-    watch(uri: Uri, options: { recursive: boolean; excludes: string[] }) {
+    watch(uri: Uri, options: { recursive: boolean; excludes: string[] }): vscode.Disposable {
         const uriStr = uri.toString(true)
-        return this.service.request('watch', [uriStr, options]) as any
+        this.service.request('watch', [uriStr, options])
+        const dispo = new vscode.Disposable(() => {
+            this.service.request('unwatch', [uriStr])
+        })
+        return dispo
     }
 
     writeFile(uri: Uri, content: Uint8Array): Promise<void> {
