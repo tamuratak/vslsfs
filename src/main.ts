@@ -106,6 +106,13 @@ export class VslsFileSystem {
             return ret
         })
 
+        service.onRequest('rename', async ([oldUriStr, newUriStr, options]: [unknown, unknown, { overwrite?: boolean }]) => {
+            assertString(oldUriStr)
+            assertString(newUriStr)
+            const oldUri = await this.uriToPath(oldUriStr)
+            const newUri = await this.uriToPath(newUriStr)
+            await vscode.workspace.fs.rename(oldUri, newUri, { overwrite: options?.overwrite })
+        })
     }
 
     async startFileSystemProviderOnGuest() {
