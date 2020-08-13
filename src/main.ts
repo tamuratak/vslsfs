@@ -2,6 +2,7 @@ import * as vsls from 'vsls/vscode'
 import * as vscode from 'vscode'
 import {Uri} from 'vscode'
 
+
 function assertString(str: unknown): asserts str is string {
     if (typeof str !== 'string') {
         throw new Error()
@@ -16,14 +17,11 @@ function assertUint8Array(data: unknown): asserts data is Uint8Array {
     }
 }
 
-type Watcher = {
-    watch: (uri: Uri) => void
-}
-
 export class VslsFileSystem {
     private readonly _vslsApi: Promise<vsls.LiveShare | null>
     serviceOnHost: vsls.SharedService | null = null
     serviceOnGuest: vsls.SharedServiceProxy | null = null
+    watcher?: vscode.FileSystemWatcher
 
     constructor() {
         this._vslsApi = vsls.getApi()
@@ -81,6 +79,11 @@ export class VslsFileSystem {
         if (!service) {
             throw new Error()
         }
+        const folder = this.workspaceFolder()
+        const pattern = new vscode.RelativePattern(folder, '**/*')
+        const watcher = vscode.workspace.createFileSystemWatcher(pattern)
+        this.watcher = watcher
+
         service.onRequest('copy', async ([srcUriStr, dstUriStr, options]: [unknown, unknown, { overwrite?: boolean}]) => {
             assertString(srcUriStr)
             assertString(dstUriStr)
@@ -157,12 +160,10 @@ export class VslsFileSystem {
 export class VslsfsProvider implements vscode.FileSystemProvider {
     private readonly service: vsls.SharedServiceProxy
     private emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>()
-    watcher?: Watcher
     onDidChangeFile: vscode.Event<vscode.FileChangeEvent[]>
 
-    constructor(service: vsls.SharedServiceProxy, watcher?: Watcher) {
+    constructor(service: vsls.SharedServiceProxy) {
         this.service = service
-        this.watcher = watcher
         this.onDidChangeFile = this.emitter.event
     }
 
