@@ -69,6 +69,29 @@ export class VslsFileSystem {
         if (!service) {
             throw new Error()
         }
+        service.onRequest('copy', async ([srcUriStr, dstUriStr, options]: [unknown, unknown, { overwrite?: boolean}]) => {
+            assertString(srcUriStr)
+            assertString(dstUriStr)
+            const src = await this.uriToPath(srcUriStr)
+            const dst = await this.uriToPath(dstUriStr)
+            vscode.workspace.fs.copy(src, dst, { overwrite: options?.overwrite })
+        })
+
+        service.onRequest('createDirectory', async ([uriStr]: [unknown]) => {
+            assertString(uriStr)
+            const path = await this.uriToPath(uriStr)
+            await vscode.workspace.fs.createDirectory(path)
+        })
+
+        service.onRequest('delete', async ([uriStr, options]: [unknown, { recursive?: boolean, useTrash?: boolean }]) => {
+            assertString(uriStr)
+            const path = await this.uriToPath(uriStr)
+            await vscode.workspace.fs.delete(
+                path,
+                { recursive: options?.recursive, useTrash: options?.useTrash }
+            )
+        })
+
         service.onRequest('readFile', async ([uriStr]: [unknown]) => {
             assertString(uriStr)
             const path = await this.uriToPath(uriStr)
@@ -104,33 +127,33 @@ export class VslsfsProvider implements vscode.FileSystemProvider {
         return this.service.request('copy', [srcUri, dstUri, options])
     }
 
-    async createDirectory(uri: Uri): Promise<void> {
+    createDirectory(uri: Uri): Promise<void> {
         const uriStr = uri.toString(true)
         return this.service.request('createDirectory', [uriStr])
     }
 
-    delete(uri: Uri, options: { recursive: boolean }): Promise<void> {
+    delete(uri: Uri, options: { recursive?: boolean, useTrash?: boolean }): Promise<void> {
         const uriStr = uri.toString(true)
         return this.service.request('delete', [uriStr, options])
     }
 
-    async readFile(uri: Uri): Promise<Uint8Array> {
+    readFile(uri: Uri): Promise<Uint8Array> {
         const uriStr = uri.toString(true)
         return this.service.request('readFile', [uriStr])
     }
 
-    async readDirectory(uri: Uri): Promise<[string, vscode.FileType][]> {
+    readDirectory(uri: Uri): Promise<[string, vscode.FileType][]> {
         const uriStr = uri.toString(true)
         return this.service.request('readDirectory', [uriStr])
     }
 
-    async rename(oldUri: Uri, newUri: Uri, options: { overwrite: boolean }): Promise<void> {
+    rename(oldUri: Uri, newUri: Uri, options: { overwrite: boolean }): Promise<void> {
         const oldUriStr = oldUri.toString(true)
         const newUriStr = newUri.toString(true)
         return this.service.request('rename', [oldUriStr, newUriStr, options])
     }
 
-    async stat(uri: Uri): Promise<vscode.FileStat> {
+    stat(uri: Uri): Promise<vscode.FileStat> {
         const uriStr = uri.toString(true)
         return this.service.request('stat', [uriStr])
     }
