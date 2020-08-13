@@ -1,5 +1,6 @@
 import * as vsls from 'vsls/vscode'
 import * as vscode from 'vscode'
+import {Uri} from 'vscode'
 
 
 export class VslsFileSystem {
@@ -20,8 +21,11 @@ export class VslsFileSystem {
 
     private async startService() {
         const vslsApi = await this.vslsApi()
-        if (vslsApi.session.role === vsls.Role.Host) {
+        const role = vslsApi.session.role
+        if (role === vsls.Role.Host) {
             return this.startFileSystemServiceOnHost()
+        } else if (role === vsls.Role.Guest) {
+            return this.startFileSystemProviderOnGuest()
         }
     }
 
@@ -46,7 +50,7 @@ export class VslsFileSystem {
         if (typeof uriStr !== 'string') {
             throw new Error()
         }
-        const uri = vscode.Uri.parse(uriStr)
+        const uri = Uri.parse(uriStr)
         if (uri.scheme !== 'vslsfs') {
             throw new Error()
         }
@@ -70,4 +74,44 @@ export class VslsFileSystem {
         })
     }
 
+    async startFileSystemProviderOnGuest() {
+        throw new Error()
+    }
+
+}
+
+export class VslsfsProvider implements vscode.FileSystemProvider {
+    constructor(private readonly service: vsls.SharedService) { }
+
+    copy(source: Uri, destination: Uri, options: { overwrite: boolean }) {
+        return
+    }
+
+    async createDirectory(uri: Uri) {
+        return
+    }
+
+    delete(uri: Uri, options: { recursive: boolean }) {
+        return
+    }
+
+    async readFile(uri: Uri) {
+        return
+    }
+
+    async readDirectory(uri: Uri) {
+        return
+    }
+
+    async rename(oldUri: Uri, newUri: Uri, options: { overwrite: boolean }) {
+        return
+    }
+
+    async stat(uri: Uri) {
+        return
+    }
+
+    watch(uri: Uri, options: { recursive: boolean; excludes: string[] }) {
+        return
+    }
 }
