@@ -10,7 +10,8 @@ function assertString(str: unknown): asserts str is string {
 
 export class VslsFileSystem {
     private readonly _vslsApi: Promise<vsls.LiveShare | null>
-    service: vsls.SharedService | null = null
+    serviceOnHost: vsls.SharedService | null = null
+    serviceOnGuest: vsls.SharedServiceProxy | null = null
 
     constructor() {
         this._vslsApi = vsls.getApi()
@@ -64,7 +65,7 @@ export class VslsFileSystem {
     async startFileSystemServiceOnHost() {
         const vslsApi = await this.vslsApi()
         const service = await vslsApi.shareService('vslsfs')
-        this.service = service
+        this.serviceOnHost = service
         if (!service) {
             throw new Error()
         }
@@ -77,7 +78,14 @@ export class VslsFileSystem {
     }
 
     async startFileSystemProviderOnGuest() {
-        throw new Error()
+        const vslsApi = await this.vslsApi()
+        const service = await vslsApi.getSharedService('vslsfs')
+        this.serviceOnGuest = service
+        if (!service) {
+            throw new Error()
+        }
+        const provider = new VslsfsProvider(service)
+        vscode.workspace.registerFileSystemProvider('vslsfs', provider)
     }
 
 }
